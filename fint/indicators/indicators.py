@@ -5,18 +5,13 @@ from .backends import numpy_impl
 from .backends import numba_impl
 from .backends import talib_impl   # << nuevo
 
+
 # API pública
 def SMA(x, period, backend=None):
     return get_indicator("SMA", backend)(x, period)
 
-def RSI(x, period=14, backend=None):
-    return get_indicator("RSI", backend)(x, period)
-
 def ROC(x, period=14, backend=None):
     return get_indicator("ROC", backend)(x, period)
-
-def VWAP(x, period=14, backend=None):
-    return get_indicator("VWAP", backend)(x, period)
 
 def ROCOHLC(open, high, low, close, length, backend=None):
     return get_indicator("ROCOHLC", backend)(open, high, low, close, length)

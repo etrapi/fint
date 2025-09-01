@@ -1,5 +1,5 @@
 from typing import Callable, Dict
-from .config import ACTIVE_BACKEND
+from . import config
 
 # Estructura: {"SMA": {"numpy": func_numpy, "numba": func_numba, ...}}
 _registry: Dict[str, Dict[str, Callable]] = {}
@@ -12,7 +12,7 @@ def register_indicator(name: str, backend: str, func: Callable):
 
 def get_indicator(name: str, backend: str = None) -> Callable:
     """Obtiene la implementación de un indicador según el backend."""
-    backend = backend or ACTIVE_BACKEND
+    backend = backend or config.ACTIVE_BACKEND
     try:
         return _registry[name][backend]
     except KeyError:

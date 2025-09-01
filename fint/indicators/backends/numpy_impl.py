@@ -12,57 +12,44 @@ def sma_numpy(x: np.ndarray, period: int) -> np.ndarray:
         cumsum[period-1:] / period
     ])
 
-def rsi_numpy(x: np.ndarray, period: int = 14) -> np.ndarray:
-    delta = np.diff(x)
-    gain = np.where(delta > 0, delta, 0.0)
-    loss = np.where(delta < 0, -delta, 0.0)
-
-    avg_gain = np.convolve(gain, np.ones(period)/period, mode="valid")
-    avg_loss = np.convolve(loss, np.ones(period)/period, mode="valid")
-
-    rs = np.divide(avg_gain, avg_loss, out=np.ones_like(avg_gain), where=avg_loss != 0)
-    rsi = 100 - (100 / (1 + rs))
-
-    return np.concatenate([
-        np.full(period, np.nan),
-        rsi
-    ])
-
-def vwap_numpy(prices: np.ndarray, volumes: np.ndarray) -> np.ndarray:
-    cum_pv = np.cumsum(prices * volumes)
-    cum_vol = np.cumsum(volumes)
-    return cum_pv / cum_vol
-
 def roc_ohlc_numpy(
     open: np.ndarray, high: np.ndarray, low: np.ndarray, close: np.ndarray, length: int
 ):
-# Input validation
+    # Input validation
     if not (open.shape == high.shape == low.shape == close.shape):
         raise ValueError("All input arrays must have the same shape")
+    # if shape is not 
     if length <= 0 or length >= len(close):
         raise ValueError("Length must be positive and less than array length")
     
+    # Calculate OHLC4 (average of OHLC)
     ohlc4 = (open + high + low + close) / 4
+
+    # Calculate Rate of Change
     actual = ohlc4[length:, :]
     previous = ohlc4[:-length, :]
     roc = np.divide(actual - previous, previous, 
                 where=previous != 0, 
                 out=np.full_like(actual, np.nan))
     indicator = np.full_like(close, np.nan)
-    indicator[length:, :] = roc
+    indicator[length:, :] = roc[:, :]
     return indicator
 
-def volume_accu_indicator_numpy(volume: np.ndarray, start_time_mask: np.ndarray):
-    volume_acu = np.full_like(volume, np.nan)
-    for column_index in range(volume.shape[1]):
-        for row_index in range(volume.shape[0]):
-            if start_time_mask[row_index,column_index]:# added column_¡ndex from original
-                volume_acu[row_index, column_index] = volume[row_index, column_index]
+def volume_accu_numpy(volume: np.ndarray, start_time_mask: np.ndarray) -> np.ndarray:
+    n_rows, n_cols = volume.shape
+    volume_acu = np.empty_like(volume, dtype=np.float64)
+    
+    # Initialize first row
+    volume_acu[0, :] = np.where(start_time_mask[0, :], volume[0, :], volume[0, :])
+    
+    for col in range(n_cols):
+        for row in range(1, n_rows):
+            # Reset if start_time_mask is True
+            if start_time_mask[row, col]:
+                volume_acu[row, col] = volume[row, col]
             else:
-                volume_acu[row_index, column_index] = (
-                    volume_acu[row_index - 1, column_index]
-                    + volume[row_index, column_index]
-                )
+                volume_acu[row, col] = volume_acu[row - 1, col] + volume[row, col]
+
     return volume_acu
 
 def open_pct_change_numpy(
@@ -118,10 +105,8 @@ def time_from_start_mask_numpy(open: np.ndarray, start_time_mask: np.ndarray):
 
 # Registro dinámico
 register_indicator("SMA", "numpy", io_wrapper(sma_numpy))
-register_indicator("RSI", "numpy", io_wrapper(rsi_numpy))
-register_indicator("VWAP", "numpy", io_wrapper(vwap_numpy))
 register_indicator("ROCOHLC", "numpy", io_wrapper(roc_ohlc_numpy))
-register_indicator("VOLUME_ACCU", "numpy", io_wrapper(volume_accu_indicator_numpy))
+register_indicator("VOLUME_ACCU", "numpy", io_wrapper(volume_accu_numpy))
 register_indicator("OPEN_PCT_CHANGE", "numpy", io_wrapper(open_pct_change_numpy))
 register_indicator("YESTERDAY_CLOSE_PCT_CHANGE", "numpy", io_wrapper(yesterday_close_pct_change_numpy))
 register_indicator("TIME_FROM_START", "numpy", io_wrapper(time_from_start_mask_numpy))
