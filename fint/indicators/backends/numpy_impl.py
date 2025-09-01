@@ -42,13 +42,13 @@ def volume_accu_numpy(volume: np.ndarray, start_time_mask: np.ndarray) -> np.nda
     # Initialize first row
     volume_acu[0, :] = np.where(start_time_mask[0, :], volume[0, :], volume[0, :])
     
-    for col in range(n_cols):
-        for row in range(1, n_rows):
+    for column_index in range(n_cols):
+        for row_index in range(1, n_rows):
             # Reset if start_time_mask is True
-            if start_time_mask[row, col]:
-                volume_acu[row, col] = volume[row, col]
+            if start_time_mask[row_index, column_index]:
+                volume_acu[row_index, column_index] = volume[row_index, column_index]
             else:
-                volume_acu[row, col] = volume_acu[row - 1, col] + volume[row, col]
+                volume_acu[row_index, column_index] = volume_acu[row_index - 1, column_index] + volume[row_index, column_index]
 
     return volume_acu
 
