@@ -2,15 +2,29 @@ import numpy as np
 from ..registry import register_indicator
 from ..io import io_wrapper
 
-def sma_numpy(x: np.ndarray, period: int) -> np.ndarray:
-    if len(x) < period:
-        return np.full_like(x, np.nan)
-    cumsum = np.cumsum(x, dtype=float)
-    cumsum[period:] = cumsum[period:] - cumsum[:-period]
-    return np.concatenate([
-        np.full(period-1, np.nan),
-        cumsum[period-1:] / period
-    ])
+def sma_numpy(x: np.ndarray, period: int, axis: int = 0) -> np.ndarray:
+    if x.shape[axis] < period:
+        return np.full(x.shape, np.nan, dtype=float)
+
+    # Prepend zeros for correct cumulative subtraction
+    cumsum = np.cumsum(x, axis=axis, dtype=float)
+    pad_shape = list(x.shape)
+    pad_shape[axis] = 1
+    cumsum = np.concatenate([np.zeros(pad_shape, dtype=float), cumsum], axis=axis)
+
+    # Rolling sum via subtraction
+    sums = cumsum.take(indices=range(period, cumsum.shape[axis]), axis=axis) \
+         - cumsum.take(indices=range(0, cumsum.shape[axis]-period), axis=axis)
+
+    # Compute SMA
+    result = sums / period
+
+    # Pad with NaN at the beginning
+    pad_shape = list(x.shape)
+    pad_shape[axis] = period - 1
+    nan_pad = np.full(pad_shape, np.nan, dtype=float)
+
+    return np.concatenate([nan_pad, result], axis=axis)
 
 def roc_ohlc_numpy(
     open: np.ndarray, high: np.ndarray, low: np.ndarray, close: np.ndarray, length: int

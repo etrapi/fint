@@ -23,25 +23,40 @@ def io_wrapper(func):
 
         new_args = []
         orig_info = []
-        is_polars_any = False
+        is_polars_any = True
 
         # --- Convert inputs to numpy 2D ---
         for a in args:
             info = {"orig_type": type(a), "was_1d": False}
 
-            if isinstance(a, pd.DataFrame):
-                numeric_cols = a.select_dtypes(include=[np.number]).columns
-                if len(numeric_cols) == 0:
-                    raise ValueError("No numeric columns found in the input Pandas DataFrame")
-                arr = a[numeric_cols].to_numpy(dtype=np.float64)
-                info.update({
-                    "type": "pd_df",
-                    "columns": numeric_cols,
-                    "index": a.index
-                })
+            if isinstance(a, (pd.DataFrame, pl.DataFrame)):
+                if isinstance(a, pd.DataFrame):
+                    print("Extracting numeric column from Pandas DataFrame")
+                    numeric_cols = a.select_dtypes(include=[np.number]).columns
+                    if len(numeric_cols) == 0:
+                        raise ValueError("No numeric columns found in the input DataFrame")
+                    arr = a[numeric_cols].to_numpy(dtype=np.float64)
+                    info.update({
+                        "type": "pd_df",
+                        "columns": numeric_cols,
+                        "index": a.index,
+                        "orig_cols": a.columns
+                    })
+                else:  # Polars DataFrame
+                    print("Extracting numeric column from Polars DataFrame")
+                    numeric_cols = [col for col in a.columns if a[col].dtype in (pl.Float64, pl.Float32, pl.Int64, pl.Int32, pl.UInt64, pl.UInt32)]
+                    if not numeric_cols:
+                        raise ValueError("No numeric columns found in the input Polars DataFrame")
+                    arr = a.select(numeric_cols).to_numpy().astype(np.float64)
+                    info.update({
+                        "type": "pl_df",
+                        "columns": numeric_cols,
+                        "orig_cols": a.columns
+                    })
                 new_args.append(arr)
 
             elif isinstance(a, pd.Series):
+                print("Extracting numeric column from Pandas Series")
                 arr = a.to_numpy(dtype=np.float64)
                 if arr.ndim == 1:
                     arr = arr[:, np.newaxis]
@@ -49,23 +64,12 @@ def io_wrapper(func):
                 info.update({"type": "pd_series", "index": a.index, "name": a.name})
                 new_args.append(arr)
 
-            elif isinstance(a, pl.DataFrame):
-                is_polars_any = True
-                numeric_cols = [col for col, dtype in zip(a.columns, a.dtypes) 
-                                if dtype in (pl.Float64, pl.Float32, pl.Int64, pl.Int32, pl.Int16, pl.Int8)]
-                if not numeric_cols:
-                    raise ValueError("No numeric columns found in the input Polars DataFrame")
-                arr = a[numeric_cols].to_numpy(dtype=np.float64)
-                info.update({
-                    "type": "pl_df",
-                    "columns": numeric_cols,
-                    "orig_cols": a.columns
-                })
-                new_args.append(arr)
 
             elif isinstance(a, pl.Series):
+                print("Extracting numeric column from Polars Series")
                 is_polars_any = True
-                arr = a.to_numpy(dtype=np.float64)
+                # First cast to float64 in Polars, then convert to numpy
+                arr = a.cast(pl.Float64).to_numpy()
                 if arr.ndim == 1:
                     arr = arr[:, np.newaxis]
                     info["was_1d"] = True
@@ -110,15 +114,22 @@ def io_wrapper(func):
                 for c in first_info.get("orig_cols", []):
                     if c not in cols:
                         out_cols[c] = first_arg[c]
+                print("Reconstruyendo Polars DataFrame")
                 return pl.DataFrame(out_cols)
             elif first_info["type"] == "pl_series":
-                return pl.Series(result, name=first_info.get("name", "result"))
+                # Ensure result is 1D for Series
+                if result.ndim > 1 and result.shape[1] == 1:
+                    result = result.ravel()
+                print("Reconstruyendo Polars Series")
+                return pl.Series(name=first_info.get("name", "result"), values=result)
 
         # Pandas reconstruction
         if isinstance(first_arg, pd.DataFrame):
             cols = first_info.get("columns", [])
+            print("Reconstruyendo Pandas DataFrame")
             return pd.DataFrame(result, index=first_info.get("index", first_arg.index), columns=cols)
         elif isinstance(first_arg, pd.Series):
+            print("Reconstruyendo Pandas Series")
             return pd.Series(result, index=first_info.get("index", first_arg.index), name=first_info.get("name", "result"))
 
         # Numpy or other fallback
